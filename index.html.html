@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Global Oceanographic & INCOIS 3D Telemetry Platform</title>
+  <style>
+    :root {
+      --bg-dark: #020617;
+      --bg-panel: rgba(10, 20, 38, 0.92);
+      --bg-card: rgba(15, 28, 54, 0.88);
+      --border-panel: rgba(0, 240, 255, 0.35);
+      --border-card: rgba(255, 255, 255, 0.12);
+      --accent-cyan: #00f0ff;
+      --accent-blue: #0284c7;
+      --accent-green: #10b981;
+      --accent-yellow: #f59e0b;
+      --accent-orange: #f97316;
+      --accent-red: #ef4444;
+      --accent-purple: #a855f7;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --font-mono: "JetBrains Mono", "Fira Code", monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body, html { width: 100%; height: 100%; overflow: hidden; background: var(--bg-dark); color: var(--text-main); font-family: var(--font-sans); font-size: 12px; }
+
+    #webgl-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 1; }
+
+    .hud-panel {
+      position: absolute; z-index: 10;
+      background: var(--bg-panel); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-panel); border-radius: 10px; padding: 12px 16px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6); transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .top-bar {
+      top: 16px; left: 16px; right: 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+      z-index: 20;
+    }
+    .brand-title { display: flex; align-items: center; gap: 12px; }
+    .brand-logo {
+      width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      color: #000; font-weight: 900; font-size: 16px; box-shadow: 0 0 15px rgba(0,240,255,0.4);
+    }
+    .brand-text h1 { font-size: 15px; font-weight: 800; letter-spacing: 0.8px; color: var(--text-main); }
+    .brand-text p { font-size: 10px; color: var(--text-sub); }
+
+    .top-actions { display: flex; align-items: center; gap: 10px; }
+
+    .search-box-container { position: relative; width: 360px; display: flex; gap: 4px; }
+    .search-input {
+      flex: 1; background: var(--bg-card); border: 1px solid var(--border-panel);
+      color: var(--text-main); padding: 8px 12px 8px 32px; border-radius: 6px;
+      font-size: 11px; outline: none; transition: border-color 0.2s;
+    }
+    .search-input:focus { border-color: var(--accent-cyan); box-shadow: 0 0 10px rgba(0,240,255,0.3); }
+    .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-sub); font-size: 11px; }
+    .search-btn {
+      background: var(--accent-cyan); color: #000; border: none; border-radius: 6px;
+      padding: 0 14px; font-weight: 700; cursor: pointer; transition: all 0.2s;
+    }
+    .search-btn:hover { background: #5eead4; box-shadow: 0 0 10px rgba(0,240,255,0.5); }
+
+    .search-results {
+      position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px;
+      background: var(--bg-panel); border: 1px solid var(--border-panel); border-radius: 6px;
+      max-height: 220px; overflow-y: auto; display: none; z-index: 100;
+    }
+    .search-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border-card); font-size: 11px; }
+    .search-item:hover { background: rgba(0, 240, 255, 0.15); color: var(--accent-cyan); }
+
+    .btn-hud {
+      background: var(--bg-card); border: 1px solid var(--border-panel); color: var(--text-main);
+      padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;
+      display: flex; align-items: center; gap: 6px; transition: all 0.2s;
+    }
+    .btn-hud:hover, .btn-hud.active { background: var(--accent-cyan); color: #000; box-shadow: 0 0 12px rgba(0,240,255,0.4); }
+
+    .panel-left {
+      top: 85px; left: 16px; width: 290px; max-height: calc(100vh - 280px); overflow-y: auto;
+      z-index: 15;
+    }
+    .panel-left::-webkit-scrollbar { width: 4px; }
+    .panel-left::-webkit-scrollbar-thumb { background: var(--border-panel); border-radius: 4px; }
+
+    .section-title {
+      font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+      color: var(--accent-cyan); margin-bottom: 8px; padding-bottom: 4px;
+      border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center;
+    }
+
+    .toggle-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .toggle-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 6px 8px; background: var(--bg-card); border: 1px solid var(--border-card);
+      border-radius: 6px; font-size: 11px;
+    }
+    .toggle-switch { position: relative; width: 32px; height: 18px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .slider-switch {
+      position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #334155; border-radius: 18px; transition: 0.3s;
+    }
+    .slider-switch:before {
+      position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px;
+      background-color: #fff; border-radius: 50%; transition: 0.3s;
+    }
+    input:checked + .slider-switch { background-color: var(--accent-blue); }
+    input:checked + .slider-switch:before { transform: translateX(14px); }
+
+    .control-row { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+    .control-row label { font-size: 10px; color: var(--text-sub); display: flex; justify-content: space-between; }
+    .select-input, .range-input {
+      width: 100%; background: var(--bg-card); border: 1px solid var(--border-card);
+      color: var(--text-main); padding: 5px; border-radius: 4px; font-size: 11px; outline: none;
+    }
+
+    .presets-bar { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+    .preset-chip {
+      background: var(--bg-card); border: 1px solid var(--border-card); color: var(--text-sub);
+      padding: 4px 8px; border-radius: 4px; font-size: 10px; cursor: pointer; transition: all 0.2s;
+    }
+    .preset-chip:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); }
+
+    .panel-right {
+      top: 85px; right: 16px; width: 340px; display: none; opacity: 0; transform: translateX(20px);
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1); z-index: 25;
+    }
+    .panel-right.active { display: block; opacity: 1; transform: translateX(0); }
+    .close-btn { cursor: pointer; color: var(--text-sub); font-weight: bold; }
+    .close-btn:hover { color: var(--accent-red); }
+
+    .telemetry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+    .telemetry-card { background: var(--bg-card); padding: 8px; border-radius: 6px; border: 1px solid var(--border-card); }
+    .telemetry-card .lbl { font-size: 9px; color: var(--text-sub); text-transform: uppercase; }
+    .telemetry-card .val { font-size: 13px; font-weight: 700; font-family: var(--font-mono); color: var(--accent-cyan); margin-top: 2px; }
+
+    .chart-container { width: 100%; height: 160px; background: rgba(0,0,0,0.4); border-radius: 6px; padding: 6px; position: relative; margin-top: 8px; }
+    #profileCanvas { width: 100%; height: 100%; display: block; }
+
+    .panel-legend {
+      bottom: 16px; left: 16px; width: 290px; z-index: 12;
+      pointer-events: auto; max-height: 175px;
+    }
+    .colorbar-preview {
+      width: 100%; height: 10px; border-radius: 3px; margin: 6px 0;
+      background: linear-gradient(to right, #00008f, #0000f0, #0070f0, #00e0e0, #70f070, #e0e000, #f07000, #f00000);
+    }
+    .legend-ticks { display: flex; justify-content: space-between; font-size: 9px; font-family: var(--font-mono); color: var(--text-sub); }
+    .legend-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; font-size: 10px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .symbol-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+    .scale-tool {
+      position: absolute; bottom: 16px; left: 320px; z-index: 12;
+      background: var(--bg-panel); border: 1px solid var(--border-panel); border-radius: 6px;
+      padding: 6px 12px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    }
+    .scale-line { width: 100px; height: 4px; background: var(--accent-cyan); border-left: 2px solid #fff; border-right: 2px solid #fff; }
+    .scale-text { font-family: var(--font-mono); font-size: 10px; color: var(--accent-cyan); }
+
+    .panel-time-popup {
+      position: absolute; top: 75px; right: 16px; width: 340px; z-index: 30;
+      display: none; flex-direction: column; gap: 12px;
+    }
+    .panel-time-popup.active { display: flex; }
+
+    .euro-argo-modal {
+      position: absolute; top: 75px; left: 50%; transform: translateX(-50%);
+      width: 82vw; height: 78vh; z-index: 50; display: none;
+      background: var(--bg-panel); border: 1px solid var(--accent-cyan); border-radius: 12px;
+      box-shadow: 0 0 50px rgba(0,240,255,0.3); overflow: hidden;
+    }
+    .euro-argo-modal.active { display: flex; flex-direction: column; }
+    .modal-header {
+      padding: 10px 16px; background: rgba(0,0,0,0.6); border-bottom: 1px solid var(--border-panel);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .modal-iframe { width: 100%; height: 100%; border: none; }
+  </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+  <div id="webgl-container"></div>
+
+  <div class="hud-panel top-bar">
+    <div class="brand-title">
+      <div class="brand-logo">G</div>
+      <div class="brand-text">
+        <h1>GEOPLANET // INCOIS 3D INTEGRATED</h1>
+        <p>Precision Oceanographic Geodesic Telemetry</p>
+      </div>
+    </div>
+
+    <div class="search-box-container">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="searchInput" class="search-input" placeholder="Search city, lat,lon (e.g. 15.2, 68.4), trench..." autocomplete="off" />
+      <button class="search-btn" onclick="triggerSearch()">Go</button>
+      <div id="searchResults" class="search-results"></div>
+    </div>
+
+    <div class="top-actions">
+      <button class="btn-hud" id="euroArgoBtn" onclick="toggleEuroArgoModal()">🗺 Euro-Argo WebMap</button>
+      <button class="btn-hud" id="timeToggleBtn" onclick="toggleTimePanel()">🕒 Time Scales</button>
+    </div>
+  </div>
+
+  <div class="hud-panel panel-left">
+    <div class="section-title">
+      <span>Observation Arrays</span>
+      <span style="color:var(--accent-green);">GEOGRAPHICALLY LOCKED</span>
+    </div>
+    <div class="toggle-group">
+      <div class="toggle-item">
+        <span>Argo Profiling Floats</span>
+        <label class="toggle-switch"><input type="checkbox" id="layer-argo" checked /><span class="slider-switch"></span></label>
+      </div>
+      <div class="toggle-item">
+        <span>Underwater Gliders</span>
+        <label class="toggle-switch"><input type="checkbox" id="layer-gliders" checked /><span class="slider-switch"></span></label>
+      </div>
+      <div class="toggle-item">
+        <span>3D Hydrographic Voxels</span>
+        <label class="toggle-switch"><input type="checkbox" id="layer-voxels" checked /><span class="slider-switch"></span></label>
+      </div>
+      <div class="toggle-item">
+        <span>Surface Currents</span>
+        <label class="toggle-switch"><input type="checkbox" id="layer-currents" checked /><span class="slider-switch"></span></label>
+      </div>
+      <div class="toggle-item">
+        <span>India EEZ Boundary</span>
+        <label class="toggle-switch"><input type="checkbox" id="layer-eez" checked /><span class="slider-switch"></span></label>
+      </div>
+      <div class="toggle-item">
+        <span>Cloud Atmosphere Layer</span>
+        <label class="toggle-switch"><input type="checkbox" id="layer-clouds" checked /><span class="slider-switch"></span></label>
+      </div>
+    </div>
+
+    <div class="section-title">
+      <span>Tectonic Boundaries</span>
+      <span style="color:var(--accent-red);">REAL FAULTS</span>
+    </div>
+    <div class="toggle-group">
+      <div class="toggle-item">
+        <span>Plate Fault Lines</span>
+        <label class="toggle-switch"><input type="checkbox" id="layer-tectonics" checked /><span class="slider-switch"></span></label>
+      </div>
+    </div>
+
+    <div class="section-title"><span>Visualization Parameters</span></div>
+    <div class="control-row">
+      <label>Active Parameter Field</label>
+      <select id="varSelect" class="select-input">
+        <option value="temp">Sea Water Temp (°C)</option>
+        <option value="salinity">Salinity (PSU)</option>
+        <option value="chlorophyll">Chlorophyll-a (mg/m³)</option>
+      </select>
+    </div>
+    <div class="control-row">
+      <label>Color Palette</label>
+      <select id="paletteSelect" class="select-input">
+        <option value="jet">Jet / Thermal</option>
+        <option value="viridis">Viridis</option>
+        <option value="plasma">Plasma</option>
+        <option value="turbo">Turbo Deep</option>
+      </select>
+    </div>
+    <div class="control-row">
+      <label>Voxel Depth Cutoff: <span id="depthVal">2000m</span></label>
+      <input type="range" id="depthSlider" class="range-input" min="0" max="2000" value="2000" step="100" />
+    </div>
+
+    <div class="section-title"><span>Geographic Waypoints</span></div>
+    <div class="presets-bar">
+      <button class="preset-chip" onclick="handleSearchResult({name:'Arabian Sea', lat:15.2, lon:68.4, depth:3200, temp:28.6, sal:36.2, chlo:0.42})">Arabian Sea</button>
+      <button class="preset-chip" onclick="handleSearchResult({name:'Bay of Bengal', lat:13.8, lon:85.2, depth:2800, temp:29.3, sal:33.1, chlo:0.88})">Bay of Bengal</button>
+      <button class="preset-chip" onclick="handleSearchResult({name:'Mariana Trench', lat:11.3733, lon:142.5917, depth:10994, temp:1.2, sal:34.7, chlo:0.01})">Mariana Trench</button>
+      <button class="preset-chip" onclick="handleSearchResult({name:'Lost City Vent', lat:30.125, lon:-42.117, depth:750, temp:90.0, sal:36.8, chlo:0.00})">Lost City Vent</button>
+    </div>
+  </div>
+
+  <div class="hud-panel panel-right" id="inspectorPanel">
+    <div class="section-title">
+      <span id="inspectTitle">Instrument Telemetry</span>
+      <span class="close-btn" onclick="closeInspector()">✕</span>
+    </div>
+    <div id="inspectSubtitle" style="font-size:10px; color:var(--text-sub); margin-bottom:6px;">Ground-Truth Dynamic Profile</div>
+
+    <div class="telemetry-grid">
+      <div class="telemetry-card">
+        <div class="lbl">Lat / Long</div>
+        <div class="val" id="teleLatLon">--</div>
+      </div>
+      <div class="telemetry-card">
+        <div class="lbl">Depth / Elevation</div>
+        <div class="val" id="teleDepth">--</div>
+      </div>
+      <div class="telemetry-card">
+        <div class="lbl" id="cardVar1Label">Temperature</div>
+        <div class="val" id="teleTemp">--</div>
+      </div>
+      <div class="telemetry-card">
+        <div class="lbl" id="cardVar2Label">Salinity</div>
+        <div class="val" id="teleSal">--</div>
+      </div>
+    </div>
+
+    <div class="section-title"><span>CTD Thermocline / Profiling Curve</span></div>
+    <div class="chart-container">
+      <canvas id="profileCanvas"></canvas>
+    </div>
+  </div>
+
+  <div class="hud-panel panel-time-popup" id="timePanel">
+    <div class="section-title">
+      <span>Temporal Controls & Scales</span>
+      <span class="close-btn" onclick="toggleTimePanel()">✕</span>
+    </div>
+
+    <div class="control-row">
+      <label>Observation Date</label>
+      <input type="date" id="datePicker" class="select-input" value="2026-09-06" />
+    </div>
+    <div class="control-row">
+      <label>24-Hour Cycle Offset: <span id="hourVal" style="color:var(--accent-cyan);">12:00 UTC</span></label>
+      <input type="range" id="hourSlider" class="range-input" min="0" max="23" value="12" step="1" />
+      <div class="legend-ticks"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:00</span></div>
+    </div>
+
+    <div class="control-row" style="margin-top:8px;">
+      <label>Climate Multi-Year Scrubber: <span id="yearVal" style="color:var(--accent-cyan); font-weight:bold;">2026</span></label>
+      <input type="range" id="yearSlider" class="range-input" min="1976" max="2076" value="2026" step="1" />
+      <div class="legend-ticks"><span>1976 (-50Y)</span><span>2026 (NOW)</span><span>2076 (+50Y)</span></div>
+    </div>
+  </div>
+
+  <div class="euro-argo-modal" id="euroArgoModal">
+    <div class="modal-header">
+      <span style="font-weight:700; color:var(--accent-cyan);">EURO-ARGO REAL-TIME GLOBAL ARGO DIRECTORY</span>
+      <span class="close-btn" onclick="toggleEuroArgoModal()">✕ Close</span>
+    </div>
+    <iframe class="modal-iframe" src="https://dataselection.euro-argo.eu/" title="Euro-Argo Selection Tool"></iframe>
+  </div>
+
+  <div class="hud-panel panel-legend">
+    <div class="section-title" style="border:none; margin-bottom:2px;">
+      <span>Legend & Physical Scale</span>
+      <span id="activeVarUnit" style="color:var(--accent-cyan);">°C</span>
+    </div>
+    <div class="colorbar-preview" id="colorbarPreview"></div>
+    <div class="legend-ticks">
+      <span id="scaleMin">0.0</span>
+      <span id="scaleMid">16.0</span>
+      <span id="scaleMax">32.0</span>
+    </div>
+    <div class="legend-grid">
+      <div class="legend-item"><span class="symbol-dot" style="background:var(--accent-cyan);"></span> Argo Float</div>
+      <div class="legend-item"><span class="symbol-dot" style="background:var(--accent-yellow);"></span> Glider</div>
+      <div class="legend-item"><span class="symbol-dot" style="background:var(--accent-purple);"></span> Sub-Cube</div>
+      <div class="legend-item"><span class="symbol-dot" style="background:var(--accent-red);"></span> Tectonic Fault</div>
+      <div class="legend-item"><span class="symbol-dot" style="background:var(--accent-green);"></span> India EEZ</div>
+      <div class="legend-item"><span class="symbol-dot" style="background:var(--accent-orange);"></span> Vent / Trench</div>
+    </div>
+  </div>
+
+  <div class="scale-tool">
+    <div class="scale-line"></div>
+    <div class="scale-text" id="scaleToolText">-- km</div>
+  </div>
+
+  <script>
+    const EARTH_RADIUS_KM = 6371.0;
+    const GLOBE_RADIUS = 2.0;
+
+    let scene, camera, renderer, controls, raycaster, mouseVector;
+    let earthMesh, cloudMesh, atmosphereMesh;
+    let argoGroup, gliderGroup, voxelGroup, currentsGroup, eezGroup, tectonicsGroup, terrainGroup;
+    let searchTargetGroup = null;
+    let activeInteractiveObjects = [];
+    let activeSelectedObject = null;
+
+    const PALETTES = {
+      jet: ['#00008f', '#0000f0', '#0070f0', '#00e0e0', '#70f070', '#e0e000', '#f07000', '#f00000'],
+      viridis: ['#440154', '#482677', '#3b528b', '#26828e', '#1f9e89', '#6ece58', '#fde725'],
+      plasma: ['#0d0887', '#46039f', '#7201a8', '#9c179e', '#bd3786', '#d8576b', '#ed7953', '#fb9f3a', '#f0f921'],
+      turbo: ['#30123b', '#4145ab', '#4675ed', '#39a2fc', '#1bcfd4', '#24ec98', '#61f84d', '#a4fc3c', '#d2e935', '#fe9b2d', '#f05b12', '#c42503', '#7a0403']
+    };
+
+    const VARIABLE_CONFIGS = {
+      temp: { min: 0.0, max: 32.0, unit: "°C", name: "Sea Temp" },
+      salinity: { min: 30.0, max: 38.0, unit: "PSU", name: "Salinity" },
+      chlorophyll: { min: 0.01, max: 5.0, unit: "mg/m³", name: "Chlorophyll" }
+    };
+
+    const ARGO_DATA = [
+      { id: "ARGO-2901542", lat: 15.20, lon: 68.40, depth: 2000, temp: 28.6, sal: 36.2, chlo: 0.42, title: "Arabian Sea Argo #2901542" },
+      { id: "ARGO-2901889", lat: 13.80, lon: 85.20, depth: 2000, temp: 29.3, sal: 33.1, chlo: 0.88, title: "Bay of Bengal Argo #2901889" },
+      { id: "ARGO-2902101", lat: 10.50, lon: 71.80, depth: 1800, temp: 28.9, sal: 35.8, chlo: 0.35, title: "Lakshadweep Basin Argo #2902101" },
+      { id: "ARGO-2903340", lat: 6.50, lon: 78.20, depth: 2000, temp: 28.1, sal: 34.9, chlo: 0.24, title: "Equatorial Indian Ocean #2903340" },
+      { id: "ARGO-2904112", lat: 18.10, lon: 89.50, depth: 1500, temp: 28.4, sal: 32.5, chlo: 1.20, title: "Northern BoB Argo #2904112" }
+    ];
+
+    const GLIDER_DATA = [
+      { id: "GLIDER-INCOIS-G02", lat: 7.20, lon: 82.50, depth: 1000, temp: 27.4, sal: 35.0, chlo: 0.58, title: "INCOIS Deep Glider G02" },
+      { id: "GLIDER-INCOIS-G05", lat: 11.20, lon: 92.80, depth: 1000, temp: 28.2, sal: 33.8, chlo: 0.92, title: "Andaman Trench Glider G05" }
+    ];
+
+    const TECTONIC_BOUNDARIES = [
+      [ [85, -10], [70, -15], [52, -35], [30, -42], [0, -18], [-20, -13], [-50, -10], [-65, -18] ],
+      [ [25, 143], [20, 145], [12, 144], [10, 141], [5, 130] ],
+      [ [12, 58], [7, 60], [3, 63], [-3, 67], [-10, 68] ]
+    ];
+
+    const INDIA_EEZ_NODES = [
+      [23.6, 68.1], [20.0, 69.5], [15.0, 71.2], [10.0, 73.5], [7.0, 76.8],
+      [5.8, 80.5], [8.0, 82.0], [12.0, 84.8], [16.0, 86.5], [20.5, 89.0],
+      [21.5, 87.0], [18.0, 84.0], [13.0, 81.0], [8.5, 78.0], [12.0, 74.0], [23.6, 68.1]
+    ];
+
+    const UNDERSEA_FEATURES = [
+      { lat: 11.3733, lon: 142.5917, name: "Mariana Trench (Challenger Deep)", depth: 10994, temp: 1.2, sal: 34.7, chlo: 0.01 },
+      { lat: 30.1250, lon: -42.1170, name: "Lost City Hydrothermal Vent", depth: 750, temp: 90.0, sal: 36.8, chlo: 0.00 }
+    ];
+
+    const SEARCH_DB = [
+      { name: "Argo Float #2901542 (Arabian Sea)", type: "argo", lat: 15.20, lon: 68.40, refId: 0 },
+      { name: "Argo Float #2901889 (Bay of Bengal)", type: "argo", lat: 13.80, lon: 85.20, refId: 1 },
+      { name: "Glider INCOIS-G02 (Sri Lanka Basin)", type: "glider", lat: 7.20, lon: 82.50, refId: 0 },
+      { name: "Mariana Trench (Challenger Deep - 10,994m)", type: "feature", lat: 11.3733, lon: 142.5917, refId: 0 },
+      { name: "Lost City Vent Field (Mid-Atlantic Ridge)", type: "feature", lat: 30.1250, lon: -42.1170, refId: 1 }
+    ];
+
+    function init() {
+      const container = document.getElementById('webgl-container');
+
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 1.8, 4.8);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      container.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.minDistance = 2.05;
+      controls.maxDistance = 8.5;
+
+      raycaster = new THREE.Raycaster();
+      mouseVector = new THREE.Vector2();
+
+      scene.add(new THREE.AmbientLight(0xddeeff, 0.65));
+      const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+      sun.position.set(5, 3, 5);
+      scene.add(sun);
+
+      buildGlobeWithSatelliteMaps();
+      buildArgoFloats();
+      buildGliders();
+      buildVolumetricSubCubes();
+      buildCurrentsSystem();
+      buildIndiaEEZ();
+      buildTectonicPlates();
+      buildUnderseaTerrainFeatures();
+
+      setupSearchEngine();
+      setupEventListeners();
+      window.addEventListener('resize', onWindowResize);
+      renderer.domElement.addEventListener('pointerdown', onPointerDown);
+
+      updatePaletteColors();
+      animate();
+    }
+
+    function latLonToVector3(lat, lon, radius) {
+      const phi = (90 - lat) * (Math.PI / 180);
+      const theta = (lon + 180) * (Math.PI / 180);
+      return new THREE.Vector3(
+        -(radius * Math.sin(phi) * Math.cos(theta)),
+        radius * Math.cos(phi),
+        radius * Math.sin(phi) * Math.sin(theta)
+      );
+    }
+
+    function buildGlobeWithSatelliteMaps() {
+      const textureLoader = new THREE.TextureLoader();
+
+      const colorMap = textureLoader.load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_atmos_2048.jpg');
+      const bumpMap = textureLoader.load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_normal_2048.jpg');
+      const specularMap = textureLoader.load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_specular_2048.jpg');
+      const cloudMap = textureLoader.load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r128/examples/textures/planets/earth_clouds_2048.png');
+
+      const earthGeo = new THREE.SphereGeometry(GLOBE_RADIUS, 64, 64);
+      const earthMat = new THREE.MeshPhongMaterial({
+        map: colorMap,
+        bumpMap: bumpMap,
+        bumpScale: 0.015,
+        specularMap: specularMap,
+        specular: new THREE.Color(0x222222),
+        shininess: 25
+      });
+      earthMesh = new THREE.Mesh(earthGeo, earthMat);
+      scene.add(earthMesh);
+
+      const cloudGeo = new THREE.SphereGeometry(GLOBE_RADIUS * 1.008, 64, 64);
+      const cloudMat = new THREE.MeshStandardMaterial({
+        map: cloudMap,
+        transparent: true,
+        opacity: 0.45,
+        blending: THREE.NormalBlending
+      });
+      cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+      scene.add(cloudMesh);
+
+      const atmosphereGeo = new THREE.SphereGeometry(GLOBE_RADIUS * 1.025, 64, 64);
+      const atmosphereMat = new THREE.ShaderMaterial({
+        vertexShader: `
+          varying vec3 vNormal;
+          void main() {
+            vNormal = normalize(normalMatrix * normal);
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          varying vec3 vNormal;
+          void main() {
+            float intensity = pow(0.65 - dot(vNormal, vec3(0, 0, 1.0)), 2.2);
+            gl_FragColor = vec4(0.0, 0.7, 1.0, 1.0) * intensity;
+          }
+        `,
+        blending: THREE.AdditiveBlending,
+        side: THREE.BackSide,
+        transparent: true
+      });
+      atmosphereMesh = new THREE.Mesh(atmosphereGeo, atmosphereMat);
+      scene.add(atmosphereMesh);
+    }
+
+    function buildArgoFloats() {
+      argoGroup = new THREE.Group();
+      ARGO_DATA.forEach((data) => {
+        const pos = latLonToVector3(data.lat, data.lon, GLOBE_RADIUS + 0.015);
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(0.028, 16, 16),
+          new THREE.MeshBasicMaterial({ color: 0x00f0ff })
+        );
+        mesh.position.copy(pos);
+        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pos.clone().normalize());
+        mesh.userData = { type: 'argo', data: data };
+        activeInteractiveObjects.push(mesh);
+        argoGroup.add(mesh);
+      });
+      earthMesh.add(argoGroup);
+    }
+
+    function buildGliders() {
+      gliderGroup = new THREE.Group();
+      GLIDER_DATA.forEach((data) => {
+        const pos = latLonToVector3(data.lat, data.lon, GLOBE_RADIUS + 0.015);
+        const mesh = new THREE.Mesh(
+          new THREE.ConeGeometry(0.025, 0.06, 4),
+          new THREE.MeshBasicMaterial({ color: 0xf59e0b })
+        );
+        mesh.position.copy(pos);
+        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pos.clone().normalize());
+        mesh.userData = { type: 'glider', data: data };
+        activeInteractiveObjects.push(mesh);
+        gliderGroup.add(mesh);
+      });
+      earthMesh.add(gliderGroup);
+    }
+
+    function buildVolumetricSubCubes() {
+      voxelGroup = new THREE.Group();
+      const regions = [
+        { minLat: 10, maxLat: 16, minLon: 64, maxLon: 70 },
+        { minLat: 10, maxLat: 16, minLon: 82, maxLon: 88 }
+      ];
+
+      regions.forEach(r => {
+        for(let lat = r.minLat; lat <= r.maxLat; lat += 3) {
+          for(let lon = r.minLon; lon <= r.maxLon; lon += 3) {
+            for(let depthIdx = 0; depthIdx < 4; depthIdx++) {
+              const dMeters = depthIdx * 500;
+              const radialOffset = GLOBE_RADIUS - (dMeters / EARTH_RADIUS_KM) * GLOBE_RADIUS;
+              const pos = latLonToVector3(lat, lon, radialOffset);
+
+              const voxel = new THREE.Mesh(
+                new THREE.BoxGeometry(0.035, 0.035, 0.035),
+                new THREE.MeshBasicMaterial({ color: 0xa855f7, transparent: true, opacity: 0.6 })
+              );
+              voxel.position.copy(pos);
+              voxel.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pos.clone().normalize());
+
+              voxel.userData = {
+                type: 'voxel',
+                depthValue: dMeters,
+                data: {
+                  title: `Hydrodynamic Voxel [${lat}°N, ${lon}°E]`,
+                  lat, lon, depth: dMeters,
+                  temp: (28.5 * Math.exp(-dMeters / 600) + 2.0).toFixed(1),
+                  sal: (35.5 - depthIdx * 0.3).toFixed(1),
+                  chlo: (0.8 * Math.exp(-dMeters / 150)).toFixed(2)
+                }
+              };
+              activeInteractiveObjects.push(voxel);
+              voxelGroup.add(voxel);
+            }
+          }
+        }
+      });
+      earthMesh.add(voxelGroup);
+    }
+
+    function buildCurrentsSystem() {
+      currentsGroup = new THREE.Group();
+      const count = 500;
+      const positions = new Float32Array(count * 3);
+      for(let i=0; i<count; i++) {
+        const lat = (Math.random() - 0.5) * 120;
+        const lon = (Math.random() - 0.5) * 360;
+        const pos = latLonToVector3(lat, lon, GLOBE_RADIUS + 0.012);
+        positions[i*3] = pos.x; positions[i*3+1] = pos.y; positions[i*3+2] = pos.z;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      const mat = new THREE.PointsMaterial({ color: 0x00f0ff, size: 0.018, transparent: true, opacity: 0.7 });
+      currentsGroup.add(new THREE.Points(geo, mat));
+      earthMesh.add(currentsGroup);
+    }
+
+    function buildIndiaEEZ() {
+      eezGroup = new THREE.Group();
+      const pts = INDIA_EEZ_NODES.map(c => latLonToVector3(c[0], c[1], GLOBE_RADIUS + 0.005));
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2 })
+      );
+      eezGroup.add(line);
+      earthMesh.add(eezGroup);
+    }
+
+    function buildTectonicPlates() {
+      tectonicsGroup = new THREE.Group();
+      TECTONIC_BOUNDARIES.forEach(b => {
+        const pts = b.map(c => latLonToVector3(c[0], c[1], GLOBE_RADIUS + 0.008));
+        const line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(pts),
+          new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 2 })
+        );
+        tectonicsGroup.add(line);
+      });
+      earthMesh.add(tectonicsGroup);
+    }
+
+    function buildUnderseaTerrainFeatures() {
+      terrainGroup = new THREE.Group();
+      UNDERSEA_FEATURES.forEach(f => {
+        const pos = latLonToVector3(f.lat, f.lon, GLOBE_RADIUS + 0.012);
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(0.03, 12, 12),
+          new THREE.MeshBasicMaterial({ color: 0xf97316 })
+        );
+        mesh.position.copy(pos);
+        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pos.clone().normalize());
+        mesh.userData = { type: 'feature', data: f };
+        activeInteractiveObjects.push(mesh);
+        terrainGroup.add(mesh);
+      });
+      earthMesh.add(terrainGroup);
+    }
+
+    function onPointerDown(e) {
+      mouseVector.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouseVector.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+      raycaster.setFromCamera(mouseVector, camera);
+      const intersects = raycaster.intersectObjects(activeInteractiveObjects);
+
+      if (intersects.length > 0) {
+        activeSelectedObject = intersects[0].object;
+        openInspector(activeSelectedObject.userData);
+      }
+    }
+
+    function openInspector(userData) {
+      const panel = document.getElementById('inspectorPanel');
+      panel.classList.add('active');
+
+      const d = userData.data;
+      const vKey = document.getElementById('varSelect').value;
+
+      document.getElementById('inspectTitle').innerText = d.title || d.id || d.name || "Search Target";
+      document.getElementById('teleLatLon').innerText = `${parseFloat(d.lat).toFixed(2)}°N, ${parseFloat(d.lon).toFixed(2)}°E`;
+      document.getElementById('teleDepth').innerText = `${d.depth} m`;
+
+      const yearVal = parseInt(document.getElementById('yearSlider').value);
+      const yearOffset = (yearVal - 2026) * 0.02;
+
+      let val1Text = "", val2Text = "";
+      if (vKey === 'temp') {
+        val1Text = `${(parseFloat(d.temp) + yearOffset).toFixed(1)} °C`;
+        val2Text = `${d.sal} PSU`;
+        document.getElementById('cardVar1Label').innerText = "Water Temp";
+        document.getElementById('cardVar2Label').innerText = "Salinity";
+      } else if (vKey === 'salinity') {
+        val1Text = `${d.sal} PSU`;
+        val2Text = `${d.temp} °C`;
+        document.getElementById('cardVar1Label').innerText = "Salinity";
+        document.getElementById('cardVar2Label').innerText = "Water Temp";
+      } else {
+        val1Text = `${d.chlo} mg/m³`;
+        val2Text = `${d.temp} °C`;
+        document.getElementById('cardVar1Label').innerText = "Chlorophyll";
+        document.getElementById('cardVar2Label').innerText = "Water Temp";
+      }
+
+      document.getElementById('teleTemp').innerText = val1Text;
+      document.getElementById('teleSal').innerText = val2Text;
+
+      renderCTDCurve(parseFloat(d.temp) + yearOffset);
+    }
+
+    function closeInspector() {
+      document.getElementById('inspectorPanel').classList.remove('active');
+    }
+
+    function renderCTDCurve(surfaceTemp) {
+      const canvas = document.getElementById('profileCanvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = canvas.parentElement.clientWidth;
+      canvas.height = canvas.parentElement.clientHeight;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = '#00f0ff'; ctx.lineWidth = 2; ctx.beginPath();
+
+      for(let depth = 0; depth <= 2000; depth += 50) {
+        const temp = (surfaceTemp - 2.0) * Math.exp(-depth / 450) + 2.0;
+        const x = (temp / 35.0) * canvas.width;
+        const y = (depth / 2000.0) * canvas.height;
+        if (depth === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+
+    function updatePaletteColors() {
+      const pKey = document.getElementById('paletteSelect').value;
+      const vKey = document.getElementById('varSelect').value;
+      const cfg = VARIABLE_CONFIGS[vKey];
+
+      const colors = PALETTES[pKey];
+      document.getElementById('colorbarPreview').style.background = `linear-gradient(to right, ${colors.join(', ')})`;
+      document.getElementById('scaleMin').innerText = `${cfg.min.toFixed(1)}`;
+      document.getElementById('scaleMid').innerText = `${((cfg.min + cfg.max)/2).toFixed(1)}`;
+      document.getElementById('scaleMax').innerText = `${cfg.max.toFixed(1)}`;
+      document.getElementById('activeVarUnit').innerText = cfg.unit;
+    }
+
+    function setupSearchEngine() {
+      const input = document.getElementById('searchInput');
+      const results = document.getElementById('searchResults');
+
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') triggerSearch();
+      });
+
+      input.addEventListener('input', (e) => {
+        const q = e.target.value.toLowerCase().trim();
+        results.innerHTML = '';
+        if (!q) { results.style.display = 'none'; return; }
+
+        const filtered = SEARCH_DB.filter(i => i.name.toLowerCase().includes(q));
+        filtered.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'search-item';
+          div.innerText = item.name;
+          div.onclick = () => {
+            let dataObj;
+            if (item.type === 'argo') dataObj = ARGO_DATA[item.refId];
+            else if (item.type === 'glider') dataObj = GLIDER_DATA[item.refId];
+            else if (item.type === 'feature') dataObj = UNDERSEA_FEATURES[item.refId];
+            else dataObj = item;
+
+            handleSearchResult({
+              name: item.name,
+              lat: item.lat,
+              lon: item.lon,
+              depth: dataObj.depth || 2000,
+              temp: dataObj.temp || 24.5,
+              sal: dataObj.sal || 35.2,
+              chlo: dataObj.chlo || 0.45
+            });
+            results.style.display = 'none';
+          };
+          results.appendChild(div);
+        });
+        results.style.display = filtered.length ? 'block' : 'none';
+      });
+    }
+
+    async function triggerSearch() {
+      const query = document.getElementById('searchInput').value.trim();
+      if (!query) return;
+
+      const coordMatch = query.match(/^([-+]?\d+\.?\d*)\s*[\s,]\s*([-+]?\d+\.?\d*)$/);
+      if (coordMatch) {
+        const lat = parseFloat(coordMatch[1]);
+        const lon = parseFloat(coordMatch[2]);
+        if (lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+          handleSearchResult({
+            name: `Coordinates [${lat.toFixed(2)}°, ${lon.toFixed(2)}°]`,
+            lat: lat, lon: lon,
+            depth: 3500, temp: 22.0, sal: 35.1, chlo: 0.35
+          });
+          return;
+        }
+      }
+
+      const localMatch = SEARCH_DB.find(i => i.name.toLowerCase().includes(query.toLowerCase()));
+      if (localMatch) {
+        let dataObj = localMatch;
+        if (localMatch.type === 'argo') dataObj = ARGO_DATA[localMatch.refId];
+        if (localMatch.type === 'glider') dataObj = GLIDER_DATA[localMatch.refId];
+        if (localMatch.type === 'feature') dataObj = UNDERSEA_FEATURES[localMatch.refId];
+
+        handleSearchResult({
+          name: localMatch.name,
+          lat: localMatch.lat, lon: localMatch.lon,
+          depth: dataObj.depth || 2000,
+          temp: dataObj.temp || 24.5,
+          sal: dataObj.sal || 35.0,
+          chlo: dataObj.chlo || 0.50
+        });
+        return;
+      }
+
+      try {
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`);
+        const data = await res.json();
+        if (data && data.length > 0) {
+          const lat = parseFloat(data[0].lat);
+          const lon = parseFloat(data[0].lon);
+          handleSearchResult({
+            name: data[0].display_name.split(',')[0],
+            lat: lat, lon: lon,
+            depth: 2500, temp: 21.5, sal: 34.8, chlo: 0.30
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn("Geocoding query fallback:", err);
+      }
+
+      alert("Location not found. Please enter valid coordinates (e.g. '15.2, 68.4') or place name.");
+    }
+
+    function handleSearchResult(target) {
+      document.getElementById('searchResults').style.display = 'none';
+
+      document.getElementById('layer-voxels').checked = true;
+      voxelGroup.visible = true;
+
+      if (searchTargetGroup) earthMesh.remove(searchTargetGroup);
+      searchTargetGroup = new THREE.Group();
+
+      const depths = [0, 200, 500, 1000, 2000, 4000];
+      depths.forEach((d, idx) => {
+        const radialOffset = GLOBE_RADIUS - (d / EARTH_RADIUS_KM) * GLOBE_RADIUS;
+        const pos = latLonToVector3(target.lat, target.lon, radialOffset);
+
+        const voxelMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(0.04, 0.04, 0.04),
+          new THREE.MeshStandardMaterial({
+            color: idx === 0 ? 0x00f0ff : (idx < 3 ? 0x10b981 : 0xa855f7),
+            wireframe: idx % 2 !== 0,
+            roughness: 0.2
+          })
+        );
+        voxelMesh.position.copy(pos);
+        voxelMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pos.clone().normalize());
+
+        voxelMesh.userData = {
+          type: 'voxel',
+          depthValue: d,
+          data: {
+            title: `${target.name} - ${d}m Depth Layer`,
+            lat: target.lat, lon: target.lon, depth: d,
+            temp: (target.temp * Math.exp(-d / 500) + 2.0).toFixed(1),
+            sal: target.sal,
+            chlo: (target.chlo * Math.exp(-d / 150)).toFixed(2)
+          }
+        };
+
+        activeInteractiveObjects.push(voxelMesh);
+        searchTargetGroup.add(voxelMesh);
+      });
+
+      const surfPos = latLonToVector3(target.lat, target.lon, GLOBE_RADIUS + 0.05);
+      const deepPos = latLonToVector3(target.lat, target.lon, GLOBE_RADIUS - (4000 / EARTH_RADIUS_KM) * GLOBE_RADIUS);
+      const rayGeo = new THREE.BufferGeometry().setFromPoints([surfPos, deepPos]);
+      const rayMat = new THREE.LineBasicMaterial({ color: 0x00f0ff, linewidth: 2, transparent: true, opacity: 0.8 });
+      searchTargetGroup.add(new THREE.Line(rayGeo, rayMat));
+
+      earthMesh.add(searchTargetGroup);
+
+      animateCameraTo(target.lat, target.lon, 2.12, () => {
+        openInspector({
+          data: {
+            title: target.name,
+            lat: target.lat,
+            lon: target.lon,
+            depth: target.depth,
+            temp: target.temp,
+            sal: target.sal,
+            chlo: target.chlo
+          }
+        });
+      });
+    }
+
+    function animateCameraTo(targetLat, targetLon, targetDistance = 2.12, onComplete) {
+      let progress = 0;
+      const startPos = camera.position.clone();
+
+      function step() {
+        progress += 0.025;
+        if (progress > 1) progress = 1;
+
+        const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+
+        const localPos = latLonToVector3(targetLat, targetLon, GLOBE_RADIUS);
+        const worldPos = localPos.clone().applyMatrix4(earthMesh.matrixWorld);
+        const normal = worldPos.clone().normalize();
+        const endPos = worldPos.clone().add(normal.multiplyScalar(targetDistance - GLOBE_RADIUS));
+
+        camera.position.lerpVectors(startPos, endPos, ease);
+        camera.lookAt(worldPos);
+        controls.target.copy(worldPos);
+        controls.update();
+
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else if (onComplete) {
+          onComplete();
+        }
+      }
+      step();
+    }
+
+    function toggleTimePanel() {
+      document.getElementById('timePanel').classList.toggle('active');
+    }
+
+    function toggleEuroArgoModal() {
+      document.getElementById('euroArgoModal').classList.toggle('active');
+    }
+
+    function filterVoxelsByDepth(maxDepth) {
+      voxelGroup.children.forEach(v => {
+        if (v.userData && v.userData.depthValue !== undefined) {
+          v.visible = v.userData.depthValue <= maxDepth;
+        }
+      });
+    }
+
+    function setupEventListeners() {
+      document.getElementById('layer-argo').addEventListener('change', e => argoGroup.visible = e.target.checked);
+      document.getElementById('layer-gliders').addEventListener('change', e => gliderGroup.visible = e.target.checked);
+      document.getElementById('layer-voxels').addEventListener('change', e => voxelGroup.visible = e.target.checked);
+      document.getElementById('layer-currents').addEventListener('change', e => currentsGroup.visible = e.target.checked);
+      document.getElementById('layer-eez').addEventListener('change', e => eezGroup.visible = e.target.checked);
+      document.getElementById('layer-tectonics').addEventListener('change', e => tectonicsGroup.visible = e.target.checked);
+      document.getElementById('layer-clouds').addEventListener('change', e => cloudMesh.visible = e.target.checked);
+
+      document.getElementById('paletteSelect').addEventListener('change', updatePaletteColors);
+      document.getElementById('varSelect').addEventListener('change', () => {
+        updatePaletteColors();
+        if (activeSelectedObject) openInspector(activeSelectedObject.userData);
+      });
+
+      document.getElementById('hourSlider').addEventListener('input', e => {
+        document.getElementById('hourVal').innerText = `${e.target.value.padStart(2, '0')}:00 UTC`;
+      });
+      document.getElementById('yearSlider').addEventListener('input', e => {
+        document.getElementById('yearVal').innerText = e.target.value;
+        if (activeSelectedObject) openInspector(activeSelectedObject.userData);
+      });
+      document.getElementById('depthSlider').addEventListener('input', e => {
+        const val = parseInt(e.target.value);
+        document.getElementById('depthVal').innerText = `${val}m`;
+        filterVoxelsByDepth(val);
+      });
+    }
+
+    function updateScaleTool() {
+      const camDist = camera.position.length();
+      const altitudeKm = (camDist - GLOBE_RADIUS) / GLOBE_RADIUS * EARTH_RADIUS_KM;
+      const visibleArcKm = Math.round((altitudeKm * 0.28));
+      document.getElementById('scaleToolText').innerText = `~ ${visibleArcKm} km`;
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const rotSpeed = 0.0003;
+      earthMesh.rotation.y += rotSpeed;
+      if (cloudMesh) cloudMesh.rotation.y += rotSpeed * 1.25;
+
+      updateScaleTool();
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    window.onload = init;
+  </script>
+
+  <!-- OCEAN DEPTH & REALISTIC ZOOM EXTENSION SCRIPT -->
+  <script>
+  (function initOceanDepthAndZoomExtension() {
+    const checkInitInterval = setInterval(() => {
+      if (window.scene && window.camera && window.earthMesh && window.controls) {
+        clearInterval(checkInitInterval);
+        bootstrapExtension();
+      }
+    }, 100);
+
+    function bootstrapExtension() {
+      // 1. ADVANCED CAMERA & ZOOM REALISM CONTROLS
+      camera.near = 0.0005; // Prevents surface mesh clipping when zooming in ultra-close
+      camera.updateProjectionMatrix();
+
+      controls.minDistance = 2.0012; // Allows camera zoom down to ~3.8 km surface altitude
+      controls.zoomSpeed = 1.0;
+      controls.rotateSpeed = 0.7;
+
+      // 2. CONCENTRIC OCEAN DEPTH STRATUM SHELLS
+      const depthLayersGroup = new THREE.Group();
+      depthLayersGroup.name = "globalDepthLayers";
+
+      const DEPTH_ZONES = [
+        { name: "Epipelagic (Sunlight Zone: 0-200m)", depthKm: 0.2, color: 0x00f0ff, opacity: 0.18 },
+        { name: "Mesopelagic (Twilight Zone: 200-1000m)", depthKm: 1.0, color: 0x0284c7, opacity: 0.22 },
+        { name: "Bathypelagic (Midnight Zone: 1000-4000m)", depthKm: 4.0, color: 0x1e1b4b, opacity: 0.32 },
+        { name: "Abyssopelagic (Abyssal Floor: 4000-6000m)", depthKm: 6.0, color: 0x090514, opacity: 0.42 }
+      ];
+
+      DEPTH_ZONES.forEach(zone => {
+        const depthRadius = GLOBE_RADIUS - (zone.depthKm / EARTH_RADIUS_KM) * GLOBE_RADIUS;
+        const geo = new THREE.SphereGeometry(depthRadius, 96, 96);
+        const mat = new THREE.MeshStandardMaterial({
+          color: zone.color,
+          transparent: true,
+          opacity: zone.opacity,
+          roughness: 0.2,
+          metalness: 0.1,
+          side: THREE.DoubleSide
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.userData = { zoneName: zone.name, depthKm: zone.depthKm };
+        depthLayersGroup.add(mesh);
+      });
+      earthMesh.add(depthLayersGroup);
+
+      // 3. GLOBAL TRENCH SOUNDINGS & DEEP-SEA FEATURE MARKERS
+      const globalBathymetryGroup = new THREE.Group();
+      const GLOBAL_DEPTH_POINTS = [
+        { name: "Mariana Trench (Challenger Deep)", lat: 11.3733, lon: 142.5917, depthMeters: 10994 },
+        { name: "Puerto Rico Trench (Milwaukee Deep)", lat: 19.8381, lon: -66.5003, depthMeters: 8376 },
+        { name: "Sunda / Java Trench", lat: -10.3167, lon: 109.9500, depthMeters: 7450 },
+        { name: "South Sandwich Trench (Meteor Deep)", lat: -55.4000, lon: -25.9167, depthMeters: 8265 },
+        { name: "Tonga Trench (Horizon Deep)", lat: -23.2500, lon: -174.7500, depthMeters: 10800 },
+        { name: "Japan Trench", lat: 40.1167, lon: 144.3167, depthMeters: 8412 },
+        { name: "Molloy Hole (Arctic Ocean)", lat: 79.1417, lon: 2.7833, depthMeters: 5550 },
+        { name: "Diamantina Deep (Indian Ocean)", lat: -35.0000, lon: 104.0000, depthMeters: 7071 },
+        { name: "Peru-Chile Trench", lat: -23.0000, lon: -71.0000, depthMeters: 8065 },
+        { name: "Mid-Atlantic Ridge Hydrothermal Vent", lat: 26.1333, lon: -44.8000, depthMeters: 3200 }
+      ];
+
+      GLOBAL_DEPTH_POINTS.forEach(loc => {
+        const depthRadius = GLOBE_RADIUS - (loc.depthMeters / (EARTH_RADIUS_KM * 1000)) * GLOBE_RADIUS;
+        const surfacePos = latLonToVector3(loc.lat, loc.lon, GLOBE_RADIUS + 0.002);
+        const deepPos = latLonToVector3(loc.lat, loc.lon, depthRadius);
+
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([surfacePos, deepPos]);
+        const lineMat = new THREE.LineBasicMaterial({ color: 0xef4444, linewidth: 2 });
+        const line = new THREE.Line(lineGeo, lineMat);
+
+        const marker = new THREE.Mesh(
+          new THREE.SphereGeometry(0.012, 12, 12),
+          new THREE.MeshBasicMaterial({ color: 0xef4444 })
+        );
+        marker.position.copy(deepPos);
+        marker.userData = {
+          type: 'bathymetry',
+          data: {
+            title: loc.name,
+            lat: loc.lat, lon: loc.lon,
+            depth: loc.depthMeters,
+            temp: (1.5 + Math.random() * 1.5).toFixed(1),
+            sal: "34.7", chlo: "0.01"
+          }
+        };
+
+        if (window.activeInteractiveObjects) window.activeInteractiveObjects.push(marker);
+        globalBathymetryGroup.add(line);
+        globalBathymetryGroup.add(marker);
+      });
+
+      // 4. WORLDWIDE OCEAN BATHYMETRIC VOXEL FIELD
+      const bathymetryGridGroup = new THREE.Group();
+      for (let lat = -70; lat <= 70; lat += 20) {
+        for (let lon = -180; lon < 180; lon += 25) {
+          [200, 1000, 3000, 5000].forEach(dMeters => {
+            const rPos = GLOBE_RADIUS - (dMeters / (EARTH_RADIUS_KM * 1000)) * GLOBE_RADIUS;
+            const pos = latLonToVector3(lat, lon, rPos);
+
+            const dot = new THREE.Mesh(
+              new THREE.BoxGeometry(0.014, 0.014, 0.014),
+              new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.35 })
+            );
+            dot.position.copy(pos);
+            dot.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pos.clone().normalize());
+
+            dot.userData = {
+              type: 'voxel',
+              depthValue: dMeters,
+              data: {
+                title: `Global Seafloor Sounding [${lat}°N, ${lon}°E]`,
+                lat: lat, lon: lon, depth: dMeters,
+                temp: (28.0 * Math.exp(-dMeters / 800) + 1.5).toFixed(1),
+                sal: (34.5 + Math.random() * 1.0).toFixed(1),
+                chlo: (0.5 * Math.exp(-dMeters / 200)).toFixed(2)
+              }
+            };
+            if (window.activeInteractiveObjects) window.activeInteractiveObjects.push(dot);
+            bathymetryGridGroup.add(dot);
+          });
+        }
+      }
+      earthMesh.add(globalBathymetryGroup);
+      earthMesh.add(bathymetryGridGroup);
+
+      // 5. LIVE ALTITUDE & OCEAN STRATUM HUD OVERLAY
+      const hud = document.createElement('div');
+      hud.style.cssText = `
+        position: absolute; bottom: 16px; right: 16px; z-index: 20;
+        background: rgba(10, 20, 38, 0.92); border: 1px solid rgba(0, 240, 255, 0.35);
+        border-radius: 8px; padding: 10px 14px; font-family: monospace;
+        color: #f8fafc; font-size: 11px; backdrop-filter: blur(12px);
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5); pointer-events: none;
+      `;
+      hud.innerHTML = `
+        <div style="color:#00f0ff; font-weight:bold; margin-bottom:4px;">CAMERA ALTITUDE & DEPTH TELEMETRY</div>
+        <div>Altitude: <span id="hudAltitudeVal" style="color:#f59e0b;">--</span></div>
+        <div>Active Stratum: <span id="hudStratumVal" style="color:#10b981;">--</span></div>
+        <div>Rendering LOD: <span id="hudLodVal" style="color:#a855f7;">--</span></div>
+      `;
+      document.body.appendChild(hud);
+
+      // 6. RENDER LOOP EXTENSION WITH ADAPTIVE ATMOSPHERE DISSOLVE
+      const renderLoopExtension = () => {
+        const camDist = camera.position.distanceTo(controls.target);
+        const altitudeKm = Math.max(0, (camDist - GLOBE_RADIUS) * EARTH_RADIUS_KM);
+
+        const altElem = document.getElementById('hudAltitudeVal');
+        const stratElem = document.getElementById('hudStratumVal');
+        const lodElem = document.getElementById('hudLodVal');
+
+        if (altElem) altElem.innerText = `${altitudeKm.toFixed(1)} km`;
+        if (stratElem) {
+          if (altitudeKm < 20) stratElem.innerText = "Abyssal Floor / Hadal Trenches";
+          else if (altitudeKm < 100) stratElem.innerText = "Bathypelagic Bathymetry Layer";
+          else if (altitudeKm < 500) stratElem.innerText = "Epipelagic Ocean Surface";
+          else stratElem.innerText = "Exosphere / Orbital Telemetry View";
+        }
+        if (lodElem) lodElem.innerText = altitudeKm < 100 ? "Sub-Kilometer High-Res" : "Global Macroscale";
+
+        if (window.cloudMesh) {
+          const cloudOpacity = Math.min(0.45, Math.max(0.0, (camDist - 2.01) * 3.0));
+          window.cloudMesh.material.opacity = cloudOpacity;
+        }
+        if (window.atmosphereMesh) {
+          const atmosOpacity = Math.min(1.0, Math.max(0.05, (camDist - 2.01) * 5.0));
+          window.atmosphereMesh.material.opacity = atmosOpacity;
+        }
+
+        depthLayersGroup.children.forEach(child => {
+          if (camDist < 2.1) {
+            child.material.opacity = child.userData.depthKm === 0.2 ? 0.35 : 0.25;
+          } else {
+            child.material.opacity = child.userData.depthKm * 0.05;
+          }
+        });
+      };
+
+      const originalAnimate = window.animate;
+      window.animate = function() {
+        renderLoopExtension();
+        if (typeof originalAnimate === 'function') originalAnimate();
+      };
+    }
+  })();
+  </script>
+  
+</body>
+</html>
